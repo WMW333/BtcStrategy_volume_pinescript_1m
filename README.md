@@ -3,4 +3,4 @@ Volume based strategy on Bitcoin.
 Ticker: btcusdtperp 
 Exchange: Binance Futures. 
 Timeframe: 1m
-Pinescript.
+Pinescript version: 5
