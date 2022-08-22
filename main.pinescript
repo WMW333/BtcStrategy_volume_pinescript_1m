@@ -1,0 +1,135 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Arcotrade
+
+//@version=5
+
+//Strategia per scalping (1min) btcusdtperp binancefutures perpetual
+
+strategy(title="Btc.Version5pine", overlay=true)
+
+//FINESTRA TEMPORALE
+// daMese = input(defval= 6, title= 'Dal Mese', minval= 1)
+// daGiorno = input(defval= 1, title= 'Dal Giorno', minval= 1)
+// daAnno = input(defval= 2020, title= 'Da Anno', minval= 1)
+
+// aMese = input(defval= 2, title= 'Al Mese', minval= 1)
+// aGiorno = input(defval= 28, title= 'Al Giorno', minval= 1)
+// aAnno = input(defval= 2021, title= 'A anno', minval= 1)
+
+// //bande bollinger
+// SmaBB = input(defval = 60, title = "SmaBB" )
+// basis = sma(close, SmaBB)
+// Dev = input (defval = 3, title = "Dev")
+// dev = Dev * stdev(close, SmaBB)
+// upper = basis + dev
+// lower = basis - dev
+
+//medie mobili esponenziali (usate solo per filtrare operazioni)
+// ema10 = ema(close, 10)
+// ema15 = ema(close, 15)
+// ema60 = ema(close, 60)
+
+//plottare le medie a grafico
+//plot(ema10, title= "10", color= #fff100, linewidth=1)
+//plot(ema15, title= "15", color= #ff0000, linewidth=1)
+//plot(ema60, title= "60", color= #ffffff, linewidth=2)
+
+//POSIZIONE:
+margine = input.int(defval = 100, title = "Margine $", minval = 1)
+leva = input.int(defval = 100, title = "Leva x", minval = 1)
+Qty_Posizione = ((margine * leva) / close [1]) //input(defval = 0.2, title = "Quantità posizione", minval = 0.00000001)
+
+
+//SOGLIE ALGORITMO DA IMPOSTARE IN INPUT:
+Soglia_Volumi = input.int(defval= 1900, title = "Soglia Volumi", minval = 10)
+Soglia_Volumi_Precedente = input.int(defval = 3000, title = "Soglia Vol. barra precedente", minval = 1)
+Soglia_spikeUpGreen = input.float(defval = 0.06, title = "Soglia SpikeUp Green x Short")
+Soglia_spikeDownRed =  input.float(defval = -0.06, title = "Soglia SpikeDown Red x Long") 
+Soglia_ATR = input.int(defval = 101, title = "Soglia ATR")
+Soglia_SpikeDown_Reverse_per_short = input.float(defval = -0.11, title = "Soglia SpikeDown Reverse x short")
+Soglia_SpikeUp_Reverse_per_long = input.float(defval = 0.11, title = "Soglia SpikeUp Reverse x long")
+
+//
+V = volume
+
+body = (close - open)
+
+
+
+//Spike (N.b: ho differenziato gli spike in base al colore della candela)
+
+//Spikeup 
+spikeUpGreen = (((high - close) / close) * 100)
+spikeUpRed = (((high - open) / open) * 100)
+//SpikeDown
+spikeDownGreen = (((low - open) / open) * 100)
+spikeDownRed = (((low - close) / close) * 100)
+
+//condizioni di ingresso
+shortcondition = body > 0 
+                 and spikeUpGreen > Soglia_spikeUpGreen 
+                 and V > Soglia_Volumi 
+                 and spikeDownGreen > Soglia_SpikeDown_Reverse_per_short 
+                 and V[1] < Soglia_Volumi_Precedente 
+                 and ta.atr(14) < Soglia_ATR 
+                 //and not longcondition//and close > upper//and not short //or body < 0 and spikeUpRed > 0.17 and spikeDownRed > -0.1 and V > 1100 and V[1] < 1500 and close > ema10 and close > ema15
+
+longcondition = body < 0 
+                 and spikeDownRed < Soglia_spikeDownRed 
+                 and V > Soglia_Volumi 
+                 and spikeUpRed < Soglia_SpikeUp_Reverse_per_long  
+                 and V [1] < Soglia_Volumi_Precedente 
+                 and ta.atr(14) < Soglia_ATR 
+                 and not shortcondition
+                 // and close < lower or body > 0 and spikeDownRed < -0.2 and V > 1400 and spikeUpGreen < 0.1 and spikeUpRed < 0.1 and spikeUpGreen> -0.1 and V > 1500 and V[1] < 1500
+
+
+//condizioni di uscita
+// closelong = high > ema60 or low < low[+ 1]
+// closeshort = low < ema15
+
+//Ingresso a mercato
+strategy.entry("long", strategy.long, qty = Qty_Posizione, when = longcondition)
+strategy.entry("short", strategy.short, qty = Qty_Posizione, when = shortcondition)
+
+
+//Trail_points: livello di attivazione trailing stop (profitto specificato in tick.) Verrà piazzato al raggiungimento della soglia prescelta (determinata in base al profitto) 
+//il valore di offset (in tick) per determinare il prezzo iniziale dell'ordine di trailing stop viene specificato con il parametro trail offset: x tick sotto livello attivazione per uscire long e vice x short
+trailpoints = input.int(defval = 1400, title = "Trailing points(livello attivazione")
+//trail_offset: prezzo di stop del trailing (specificato in tick). Rappresenta il valore di offset in tick per determinare il prezzo iniziale dello stop del trailing:
+//x tick sotto "trail points" per uscire da poizioni long, x tick sopra "trail points" per uiscire da short.
+trailoffset = input.int(defval = 10, title = "Trailing offset (x tick sopra o sotto trail point")
+lossLong = input.int(defval = 1250, title = "SL Long in ticks")
+
+//Stop Loss x Short in ticks (anche in input)
+lossShort = input.int(defval = 1100, title = "SL Short in ticks")
+
+
+strategy.exit("exit", "long", trail_points = trailpoints , trail_offset = trailoffset, loss = lossLong) // qty = Qty_Posizione // profit = profitLong
+strategy.exit("exit", "short", trail_points = trailpoints, trail_offset = trailoffset, loss = lossShort) //qty = Qty_Posizione// profit = profitShort
+
+//Determinare il numero massimo di ordini eseguiti ogni giorno (anche in input)
+Max_trade_giornalieri = input.int(defval = 50, title = "Max trades giornalieri")
+strategy.risk.max_intraday_filled_orders(Max_trade_giornalieri)
+
+//Determinare la perdita massima in cash per 1 giorno
+Max_loss_giornaliera = input.int(defval = 700, title = "Max perdita giornaliera $")
+strategy.risk.max_intraday_loss(Max_loss_giornaliera, strategy.cash)
+
+// strategy.close("long", when = closeshort)
+// strategy.close("short", when = closelong)
+
+
+// longcondition = long and long [0] and not long [1] //aspettare [N candele] prima di aprire la posizione
+// shortcondition = short and short [0] and not short [1] // ""
+
+
+// plot(ema10, title= "10", color= #00ffaa, linewidth=3)
+// plot(ema60, title= "60", color= #FFC1CC, linewidth=2)
+
+// start = timestamp(2019, 1, 1,0 ,0)
+// end = timestamp(2022, 2, 24,0,0)
+
+// if time >= start and time <= end
+//     strategy.entry("long", strategy.long, 1.0, when = longcondition)
+//     strategy.entry("short", strategy.short, 1.0, when = shortcondition)
